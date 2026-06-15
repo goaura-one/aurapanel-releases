@@ -37,10 +37,12 @@ case "$ARCH" in
 esac
 
 say "Resolving the latest auraPanel release for ${ARCH}…"
-# The latest *published* Release == latest successful build. Pull its assets
-# and pick the .deb for this arch. (No jq dependency — grep the asset URL.)
+# Pull the releases LIST (newest first) and pick the first .deb for this arch.
+# We avoid /releases/latest — GitHub answers it with slow 504s for this repo,
+# which broke installs/updates; /releases is fast and reliable. (No jq — grep
+# the asset URL; the list is newest-first, so head -1 is the newest build.)
 api="$(curl -fsSL -H 'Accept: application/vnd.github+json' \
-  "https://api.github.com/repos/${REPO}/releases/latest")" \
+  "https://api.github.com/repos/${REPO}/releases?per_page=30")" \
   || die "Could not reach the GitHub releases API."
 
 url="$(printf '%s' "$api" \
