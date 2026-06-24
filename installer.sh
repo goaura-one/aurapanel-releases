@@ -58,6 +58,36 @@ trap 'rm -f "$tmp"' EXIT
 say "Downloading $(basename "$url")…"
 curl -fL --retry 3 -o "$tmp" "$url" || die "Download failed."
 
+# Verify the package against the release's SIGNED SHA256SUMS *before* installing
+# it as root. The Ed25519 public key is embedded here because the .deb that ships
+# it (/opt/aurapanel/share/release-ed25519.pub, used by update.sh) is not on disk
+# yet on a first-touch bootstrap. Fail closed: a valid signature over SHA256SUMS
+# AND a matching checksum are BOTH required. Mirrors update.sh's verify_artifact —
+# KEEP THE EMBEDDED KEY IN SYNC with installer/release-ed25519.pub.
+base="${url%/*}"            # https://…/releases/download/<tag>
+name="$(basename "$url")"   # aurapanel_<ver>_<arch>.deb
+pub="$(mktemp /tmp/aurapanel.XXXXXX.pub)"
+sums="$(mktemp /tmp/aurapanel.XXXXXX.sums)"
+sig="$(mktemp /tmp/aurapanel.XXXXXX.sig)"
+trap 'rm -f "$tmp" "$pub" "$sums" "$sig"' EXIT
+cat > "$pub" <<'PUBKEY'
+-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEARTexoH8qDE3/xksfU/KKOWWlUhYihjsdC4LVHyircDA=
+-----END PUBLIC KEY-----
+PUBKEY
+command -v openssl   >/dev/null 2>&1 || die "openssl is required to verify the release signature."
+command -v sha256sum >/dev/null 2>&1 || die "sha256sum is required to verify the package."
+say "Verifying release signature + checksum…"
+curl -fsSL -o "$sums" "$base/SHA256SUMS"     || die "Release publishes no SHA256SUMS — refusing to install unverified."
+curl -fsSL -o "$sig"  "$base/SHA256SUMS.sig" || die "Release publishes no SHA256SUMS.sig — refusing to install unverified."
+openssl pkeyutl -verify -pubin -inkey "$pub" -rawin -in "$sums" -sigfile "$sig" >/dev/null 2>&1 \
+  || die "Release signature verification FAILED — refusing to install (tampering or wrong key)."
+want="$(awk -v f="$name" '$2 == f || $2 == "*"f {print $1; exit}' "$sums")"
+[ -n "$want" ] || die "No checksum for ${name} in SHA256SUMS — refusing to install."
+got="$(sha256sum "$tmp" | awk '{print $1}')"
+[ "$want" = "$got" ] || die "Checksum mismatch for ${name} — refusing to install."
+say "Signature + checksum verified (Ed25519)."
+
 say "Installing the package…"
 $SUDO dpkg -i "$tmp"
 
