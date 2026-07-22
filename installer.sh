@@ -41,13 +41,20 @@ say "Resolving the latest auraPanel release for ${ARCH}…"
 # We avoid /releases/latest — GitHub answers it with slow 504s for this repo,
 # which broke installs/updates; /releases is fast and reliable. (No jq — grep
 # the asset URL; the list is newest-first, so head -1 is the newest build.)
-api="$(curl -fsSL -H 'Accept: application/vnd.github+json' \
+api="$(curl -fsSL --connect-timeout 10 --max-time 60 --retry 3 \
+  -H 'Accept: application/vnd.github+json' \
   "https://api.github.com/repos/${REPO}/releases?per_page=30")" \
   || die "Could not reach the GitHub releases API."
 
+# First match = newest (the list is newest-first). NOT `head -1`: the match list
+# outgrew grep's 4K stdio buffer, so grep kept writing after head exited, took
+# SIGPIPE, and under `set -euo pipefail` the script died HERE with no output
+# (the "prints Resolving… then nothing" failure). sed reads all its input, so
+# the pipe never closes early; `|| true` lets a no-match (grep exit 1) fall
+# through to the die below instead of silently killing the script the same way.
 url="$(printf '%s' "$api" \
   | grep -oE "https://[^\"]*/aurapanel_[0-9][^\"]*_${ARCH}\.deb" \
-  | head -1)"
+  | sed -n '1p')" || true
 [ -n "$url" ] || die "No aurapanel_*_${ARCH}.deb asset in the latest release yet (build may still be running)."
 
 ver="$(printf '%s' "$url" | sed -E 's#.*/aurapanel_([^_]+)_'"${ARCH}"'\.deb#\1#')"
@@ -56,7 +63,7 @@ say "Latest release: v${ver:-?}  (${ARCH})"
 tmp="$(mktemp /tmp/aurapanel.XXXXXX.deb)"
 trap 'rm -f "$tmp"' EXIT
 say "Downloading $(basename "$url")…"
-curl -fL --retry 3 -o "$tmp" "$url" || die "Download failed."
+curl -fL --connect-timeout 15 --retry 3 -o "$tmp" "$url" || die "Download failed."
 
 # Verify the package against the release's SIGNED SHA256SUMS *before* installing
 # it as root. The Ed25519 public key is embedded here because the .deb that ships
@@ -78,8 +85,8 @@ PUBKEY
 command -v openssl   >/dev/null 2>&1 || die "openssl is required to verify the release signature."
 command -v sha256sum >/dev/null 2>&1 || die "sha256sum is required to verify the package."
 say "Verifying release signature + checksum…"
-curl -fsSL -o "$sums" "$base/SHA256SUMS"     || die "Release publishes no SHA256SUMS — refusing to install unverified."
-curl -fsSL -o "$sig"  "$base/SHA256SUMS.sig" || die "Release publishes no SHA256SUMS.sig — refusing to install unverified."
+curl -fsSL --connect-timeout 10 --max-time 60 --retry 3 -o "$sums" "$base/SHA256SUMS"     || die "Release publishes no SHA256SUMS — refusing to install unverified."
+curl -fsSL --connect-timeout 10 --max-time 60 --retry 3 -o "$sig"  "$base/SHA256SUMS.sig" || die "Release publishes no SHA256SUMS.sig — refusing to install unverified."
 openssl pkeyutl -verify -pubin -inkey "$pub" -rawin -in "$sums" -sigfile "$sig" >/dev/null 2>&1 \
   || die "Release signature verification FAILED — refusing to install (tampering or wrong key)."
 want="$(awk -v f="$name" '$2 == f || $2 == "*"f {print $1; exit}' "$sums")"
