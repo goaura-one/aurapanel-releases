@@ -2,7 +2,9 @@
 #
 # auraPanel bootstrap installer — always fetches the LATEST released package.
 #
-#   curl -fsSL https://aurapanel.goaura.one/installer.sh | bash
+#   curl -fsSL https://aurapanel.net/installer.sh | bash
+#   (aurapanel.net serves this file from the releases repository; the earlier
+#   https://aurapanel.goaura.one/installer.sh still works and is the same bytes)
 #   # …or pass installer flags through:
 #   curl -fsSL …/get.sh | bash -s -- --yes --db=both --node=yes --php=yes
 #
