@@ -13,10 +13,10 @@ The **release channel**: `.deb` packages for amd64 and arm64, the static `aurapa
 One command on a fresh Debian 12/13 or Ubuntu 22.04–26.04 server (x86-64 or ARM64):
 
 ```bash
-curl -fsSL https://aurapanel.net/install.sh | bash
+curl -fsSL https://aurapanel.net/installer.sh | bash
 ```
 
-`https://aurapanel.net/install.sh` is the official installer URL; `https://aurapanel.goaura.one/installer.sh` serves the same file. Requirements and what the installer changes: <https://aurapanel.net/download>
+`https://aurapanel.net/installer.sh` is the official installer URL; `https://aurapanel.goaura.one/installer.sh` serves the same file. Requirements and what the installer changes: <https://aurapanel.net/download>
 
 New installs start a 30-day free trial with no card required. One licence covers one server and everything you run on it: <https://aurapanel.net/pricing>
 
